@@ -146,6 +146,7 @@ public class IndexingServiceImpl implements IndexingService {
             }
         }
 
+
         private List<Element> getElementsFromDocument(Document document) {
             return document.select("a[href$=.html], a[href$=.htm], a[href]:not([href$=.])")
                     .stream()
