@@ -31,7 +31,8 @@ public class PageEntity {
     @JoinColumn(name = "site_id", nullable = false)
     private SiteEntity siteId;
 
-    @Column(name = "path", columnDefinition = "TEXT NOT NULL, index(path(255))", unique = true, nullable = false)
+
+    @Column(name = "path", columnDefinition = "TEXT NOT NULL, index(path(1024))", unique = true, nullable = false)
     private String path;
 
     @Column(nullable = false)

@@ -2,7 +2,6 @@ package searchengine.services;
 
 import lombok.SneakyThrows;
 import org.jsoup.Connection;
-import org.jsoup.HttpStatusException;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -16,9 +15,9 @@ import searchengine.model.Status;
 import searchengine.repository.PageEntityRepository;
 import searchengine.repository.SiteEntityRepository;
 
-import javax.print.Doc;
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
 import java.net.URL;
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -28,13 +27,15 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.RecursiveAction;
-import java.util.stream.Collectors;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 @Service
 public class IndexingServiceImpl implements IndexingService {
     private final SiteEntityRepository siteEntityRepository;
     private final SitesList sites;
-    private final ForkJoinPool forkJoinPool = new ForkJoinPool(20);
+    private final ForkJoinPool forkJoinPool = new ForkJoinPool(10);
+    private Logger logger = Logger.getLogger(IndexingServiceImpl.SiteCrawler.class.getName());
     private final PageEntityRepository pageEntityRepository;
 
     public IndexingServiceImpl(SiteEntityRepository siteEntityRepository, SitesList sites,
@@ -46,6 +47,8 @@ public class IndexingServiceImpl implements IndexingService {
 
     @Override
     public HttpStatus startIndexing() {
+        pageEntityRepository.deleteAll();
+        siteEntityRepository.deleteAll();
         List<Site> sitesToIndex = sites.getSites();
         if (sitesToIndex.isEmpty()) {
             return HttpStatus.NOT_FOUND;
@@ -63,8 +66,6 @@ public class IndexingServiceImpl implements IndexingService {
 
         @Override
         protected void compute() {
-            pageEntityRepository.deleteAll();
-            siteEntityRepository.deleteAll();
             for (Site site : sites) {
                 try {
                     // создание новой записи для сайта со статусом INDEXING
@@ -103,22 +104,24 @@ public class IndexingServiceImpl implements IndexingService {
                 String currentUrl = urlsToCrawl.poll();
 
                 Connection.Response response = connection(currentUrl);
-                Document doc = response.parse();
-                String contentType = response.contentType();
+                Document doc = null;
+                try {
+                    doc = response.parse();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
                 String relativePath = new File(new URL(doc.location()).getPath()).getPath();
-
-                if (contentType != null && contentType.contains("text/html")) {
-                    List<Element> elements = getElementsFromDocument(doc);
-                    for (Element element : elements) {
-                        String link = element.absUrl("href");
-                        if (!visitedUrls.contains(link)) {
-                            if (!link.isEmpty() & (link.startsWith(site.getUrl()))) {
-                                urlsToCrawl.add(link);
-                            }
-                            visitedUrls.add(link);
+                List<Element> elements = getElementsFromDocument(doc);
+                for (Element element : elements) {
+                    String link = element.absUrl("href");
+                    if (!visitedUrls.contains(link)) {
+                        if (!link.isEmpty()) {
+                            urlsToCrawl.add(link);
                         }
+                        visitedUrls.add(link);
                     }
                 }
+
                 PageEntity pageDuplicates = pageEntityRepository.findPageEntityByPath(relativePath);
                 if (pageDuplicates == null) {
                     PageEntity page = new PageEntity();
@@ -142,18 +145,20 @@ public class IndexingServiceImpl implements IndexingService {
                         .referrer("http://www.google.com")
                         .execute();
             } catch (IOException e) {
-                throw new RuntimeException(e);
+                logger.log(Level.WARNING, "Ошибка при подключении к  : " + e.getMessage());
+                throw new RuntimeException(urlToConnection);
             }
         }
 
 
-
         private List<Element> getElementsFromDocument(Document document) {
-            return document.select("a[href$=.html], a[href$=.htm], a[href]:not([href$=.])")
+            String baseUrl = document.baseUri();
+            return document.select(String.format("a[href^=%s], a[href^=/]", baseUrl))
                     .stream()
-                    .filter(link -> link.absUrl("href")
-                            .startsWith("http://") || link.absUrl("href")
-                            .startsWith("https://"))
+                    .filter(link -> {
+                        String absUrl = link.absUrl("href");
+                        return absUrl.startsWith(baseUrl);
+                    })
                     .toList();
         }
     }

@@ -24,3 +24,9 @@ indexing-settings:
       name: Радиомв.ру
 #    - url: https://ipfran.ru/
 #      name: Ипфран.ру
+    - url: https://www.lutherancathedral.ru/
+      name: Кафедра.ру
+    - url: https://dombulgakova.ru/
+      name: ДомБулгакова.ру
+    - url: https://www.svetlovka.ru/
+      name: Светловка.ру
