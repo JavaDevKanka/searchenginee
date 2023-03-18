@@ -15,5 +15,7 @@ import java.util.List;
 @Transactional
 public interface SiteEntityRepository extends JpaRepository<SiteEntity, Integer> {
     SiteEntity findByUrl(String url);
+    SiteEntity findSiteEntityByName(String siteName);
+
 
 }

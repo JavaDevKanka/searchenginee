@@ -1,29 +1,30 @@
-//package searchengine.model;
-//
-//import lombok.Getter;
-//import lombok.Setter;
-//
-//import javax.persistence.Column;
-//import javax.persistence.Entity;
-//import javax.persistence.GeneratedValue;
-//import javax.persistence.GenerationType;
-//import javax.persistence.Id;
-//
-//@Entity
-//@Getter
-//@Setter
-//public class Lemma {
-//    @Id
-//    @Column(nullable = false)
-//    @GeneratedValue(strategy = GenerationType.IDENTITY)
-//    private int Id;
-//
-//    @Column(nullable = false)
-//    private int siteId;
-//
-//    @Column(nullable = false, columnDefinition = "VARCHAR(255)")
-//    private String lemma;
-//
-//    @Column(nullable = false)
-//    private int frequency;
-//}
+package searchengine.model;
+
+import lombok.Data;
+import searchengine.config.Site;
+
+import javax.persistence.*;
+import java.util.Collection;
+
+@Entity
+@Data
+@Table(name = "lemma" )
+public class Lemma {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private int id;
+
+    @Column(name = "lemma")
+    private String lemma;
+
+    private int frequency;
+
+    @ManyToOne()
+    @JoinColumn(name = "site_id", referencedColumnName = "id", nullable = false)
+    private SiteEntity siteByLemma;
+
+    @OneToMany(mappedBy = "lemmaByIndex")
+    private Collection<Index> indexesById;
+
+
+}
