@@ -15,5 +15,5 @@ public interface PageEntityRepository extends JpaRepository<PageEntity, Integer>
     PageEntity getPageEntityByPath(String path);
     void deletePageEntityById(int pageId);
     @Query(value = "select count(p) from PageEntity p where p.siteId.id =:siteId")
-    int countPagesbySiteId(@Param("siteId") int siteId);
+    int countPagesBySiteId(@Param("siteId") int siteId);
 }

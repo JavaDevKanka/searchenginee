@@ -29,12 +29,6 @@ public class StatisticsServiceImpl implements StatisticsService {
 
     @Override
     public StatisticsResponse getStatistics() {
-        String[] statuses = { "INDEXED", "FAILED", "INDEXING" };
-        String[] errors = {
-                "Ошибка индексации: главная страница сайта не доступна",
-                "Ошибка индексации: сайт не доступен",
-                ""
-        };
 
         TotalStatistics total = new TotalStatistics();
         total.setSites(sites.getSites().size());
@@ -46,14 +40,13 @@ public class StatisticsServiceImpl implements StatisticsService {
             DetailedStatisticsItem item = new DetailedStatisticsItem();
             item.setName(site.getName());
             item.setUrl(site.getUrl());
-            int pages = pageEntityRepository.countPagesbySiteId(site.getId());
+            int pages = pageEntityRepository.countPagesBySiteId(site.getId());
             int lemmas = lemmaRepository.countLemmasBySiteId(site.getId());
             item.setPages(pages);
             item.setLemmas(lemmas);
             item.setStatus(site.getStatus().name());
             item.setError(site.getLastError());
-            item.setStatusTime(System.currentTimeMillis() -
-                    (random.nextInt(10_000)));
+            item.setStatusTime(site.getStatusTime());
             total.setPages(total.getPages() + pages);
             total.setLemmas(total.getLemmas() + lemmas);
             detailed.add(item);

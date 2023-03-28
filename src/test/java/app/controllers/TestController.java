@@ -1,9 +1,9 @@
-package searchengine;
+package app.controllers;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.ComponentScan;
 import org.springframework.test.context.junit4.SpringRunner;
 import searchengine.config.Site;
 import searchengine.model.SiteEntity;
@@ -20,20 +20,17 @@ import java.util.List;
 
 @RunWith(SpringRunner.class)
 @SpringBootTest
-public class TestMethods {
-    @Autowired
+public class TestController {
+
     private SiteEntityRepository siteEntityRepository;
-    @Autowired
+
     private PageEntityRepository pageEntityRepository;
-    @Autowired
+
     private LemmaRepository lemmaRepository;
-    @Autowired
+
     private IndexRepository indexRepository;
 
-    @Autowired
     private LemmaService lemmaService;
-
-    @Autowired
     private IndexingService indexingService;
 
 

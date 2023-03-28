@@ -92,11 +92,14 @@ public class IndexingServiceImpl implements IndexingService {
 
     @Override
     public Object indexPage(String url, Site siteConfig) {
+        setIndexingStarted(true);
         SiteEntity site = siteEntityRepository.getSiteEntityByUrl(siteConfig.getUrl());
+        site.setStatus(Status.INDEXING);
+        site.setStatusTime(LocalDateTime.now());
+        site.setLastError(null);
+        siteEntityRepository.save(site);
         try {
             Connection.Response response = connection(url);
-
-
             if (!siteConfig.getUrl().equals(site.getUrl())) {
                 return new ErrorOperation("Такого сайта в конфигурации нет");
             }
@@ -126,7 +129,9 @@ public class IndexingServiceImpl implements IndexingService {
                 site.setStatusTime(LocalDateTime.now());
                 siteEntityRepository.save(site);
             }
-
+            site.setStatusTime(LocalDateTime.now());
+            site.setStatus(Status.INDEXED);
+            siteEntityRepository.save(site);
             return new DoneOperation("true");
         } catch (IOException e) {
             site.setStatus(Status.FAILED);
