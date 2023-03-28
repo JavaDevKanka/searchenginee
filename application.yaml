@@ -16,22 +16,23 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.MySQL8Dialect
 
-
+search-engine:
+  batch-size: 25
 
 indexing-settings:
   sites:
-    - url: http://radiomv.ru/
-      name: Радиомв.ру
-    - url: https://ipfran.ru/
-      name: Ипфран.ру
+#    - url: http://radiomv.ru/
+#      name: Радиомв.ру
+#    - url: https://ipfran.ru/
+#      name: Ипфран.ру
     - url: https://www.lutherancathedral.ru/
       name: Кафедра.ру
-    - url: https://dombulgakova.ru/
-      name: ДомБулгакова.ру
+#    - url: https://dombulgakova.ru/
+#      name: ДомБулгакова.ру
     - url: https://www.svetlovka.ru/
       name: Светловка.ру
-    - url: https://volochek.life/
-      name: Волочек.ру
-    - url: https://dimonvideo.ru/
-      name: Димон.ру
+#    - url: https://volochek.life/
+#      name: Волочек.ру
+#    - url: https://dimonvideo.ru/
+#      name: Димон.ру
 

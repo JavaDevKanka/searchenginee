@@ -52,14 +52,11 @@ public class ApiController {
     public ResponseEntity<Object> indexPage(@RequestParam(name = "url") String url) {
         if (!indexingService.getIsIndexingStarted()) {
             for (Site site : sites.getSites()) {
-                if (site.getUrl().toLowerCase().startsWith(url.toLowerCase())) {
+                if (url.contains(site.getUrl())) {
                     return ResponseEntity.ok(indexingService.indexPage(url, site));
-                } else {
-                    return ResponseEntity.badRequest().body(new ErrorOperation("Указанная страница не найдена"));
                 }
-
             }
-
+            return ResponseEntity.badRequest().body(new ErrorOperation("Указанная страница не найдена"));
         }
         return ResponseEntity.badRequest().body(new ErrorOperation("Индексация уже запущена"));
     }

@@ -14,8 +14,10 @@ import java.util.List;
 @Repository
 @Transactional
 public interface SiteEntityRepository extends JpaRepository<SiteEntity, Integer> {
-    SiteEntity findByUrl(String url);
+    SiteEntity getSiteEntityByUrl(String url);
     SiteEntity findSiteEntityByName(String siteName);
 
+    @Query(value = "select s from SiteEntity s")
+    List<SiteEntity> getSiteEntities();
 
 }

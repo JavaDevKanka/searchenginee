@@ -3,10 +3,23 @@ package searchengine.services;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.lucene.morphology.LuceneMorphology;
 import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.safety.Safelist;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.tartarus.snowball.ext.RussianStemmer;
+import searchengine.model.IndexPageLemma;
+import searchengine.model.Lemma;
+import searchengine.model.PageEntity;
+import searchengine.model.SiteEntity;
+import searchengine.repository.IndexRepository;
+import searchengine.repository.LemmaRepository;
+import searchengine.repository.PageEntityRepository;
+import searchengine.repository.SiteEntityRepository;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -16,16 +29,59 @@ import java.util.regex.Pattern;
 
 @Slf4j
 @Service
-public class LemmasImpl implements Lemmas {
+public class LemmaServiceImpl implements LemmaService {
+    private final SiteEntityRepository siteEntityRepository;
+    private final PageEntityRepository pageEntityRepository;
 
     private static final String[] particlesNames = new String[]{"МЕЖД", "ПРЕДЛ", "СОЮЗ"};
     private final LuceneMorphology luceneMorphology;
     private static final String REGEXP_TEXT = "\\s*(\\s|\\?|\\||»|«|\\*|,|!|\\.)\\s*";
     private static final String REGEXP_WORD = "[а-яА-ЯёЁ]+";
+    private final LemmaRepository lemmaRepository;
+    private final IndexRepository indexRepository;
 
-    public LemmasImpl(LuceneMorphology luceneMorphology) {
+    public LemmaServiceImpl(LuceneMorphology luceneMorphology, LemmaRepository lemmaRepository, IndexRepository indexRepository,
+                            PageEntityRepository pageEntityRepository,
+                            SiteEntityRepository siteEntityRepository) {
         this.luceneMorphology = luceneMorphology;
+        this.lemmaRepository = lemmaRepository;
+        this.indexRepository = indexRepository;
+        this.pageEntityRepository = pageEntityRepository;
+        this.siteEntityRepository = siteEntityRepository;
     }
+
+    @Override
+    @Transactional
+    @Modifying
+    public void saveLemma(PageEntity page, SiteEntity site) {
+        Map<String, Integer> lemmasFromPage = lemmasAndCount(page.getContent());
+        List<Lemma> lemmas = new ArrayList<>();
+        List<IndexPageLemma> indexes = new ArrayList<>();
+        lemmasFromPage.forEach((lemmaName, count) -> {
+            IndexPageLemma indexPageLemma = new IndexPageLemma();
+            Lemma getLemmaFromDB = lemmaRepository.getLemmaByLemmaAndSiteId(lemmaName, site.getId());
+            if (getLemmaFromDB != null) {
+                getLemmaFromDB.setFrequency(getLemmaFromDB.getFrequency() + 1);
+                lemmas.add(getLemmaFromDB);
+                indexPageLemma.setLemmaByIndex(getLemmaFromDB);
+                indexes.add(indexPageLemma);
+            } else {
+                Lemma lemma = new Lemma();
+                lemma.setFrequency(1);
+                lemma.setLemma(lemmaName);
+                lemma.setSiteByLemma(page.getSiteId());
+                lemmas.add(lemma);
+                indexPageLemma.setLemmaByIndex(lemma);
+                indexes.add(indexPageLemma);
+            }
+            indexPageLemma.setPageByIndex(page);
+            indexPageLemma.setRankLemma(count);
+            indexes.add(indexPageLemma);
+        });
+        lemmaRepository.saveAll(lemmas);
+        indexRepository.saveAll(indexes);
+    }
+
 
     public String[] arrayContainsRussianWords(String text) {
         return text.toLowerCase(Locale.ROOT)
@@ -34,7 +90,7 @@ public class LemmasImpl implements Lemmas {
                 .split("\\s+");
     }
 
-    public Map<String, Integer> collectLemmas(String text) {
+    public Map<String, Integer> lemmasAndCount(String text) {
         String[] words = arrayContainsRussianWords(text);
         HashMap<String, Integer> lemmas = new HashMap<>();
 
@@ -65,6 +121,11 @@ public class LemmasImpl implements Lemmas {
         return lemmas;
     }
 
+    public String removeHtmlTags(String html) {
+        Document doc = Jsoup.parse(html);
+        return Jsoup.clean(doc.body().html(), Safelist.none());
+    }
+
     public boolean anyWordBaseBelongToParticle(List<String> wordBaseForms) {
         return wordBaseForms.stream().anyMatch(this::hasParticleProperty);
     }
@@ -83,7 +144,7 @@ public class LemmasImpl implements Lemmas {
         String textForSearchQuery = Jsoup.parse(content).getElementsContainingOwnText(textQuery).text();
         Pattern pattern = Pattern.compile(textQuery);
         Matcher matcher = pattern.matcher(textForSearchQuery);
-        String snippet ;
+        String snippet;
         if (matcher.find()) {
             int beginIndex = matcher.start() > 80 ?
                     textForSearchQuery.lastIndexOf(' ', matcher.start() - 60) : 0;
@@ -128,10 +189,8 @@ public class LemmasImpl implements Lemmas {
         if (word.matches(REGEXP_WORD)) {
             List<String> wordBaseForms =
                     luceneMorphology.getMorphInfo(word);
-            if ((!wordBaseForms.get(0).endsWith("ПРЕДЛ") && (!wordBaseForms.get(0).endsWith("СОЮЗ")) &&
-                    (!wordBaseForms.get(0).endsWith("ЧАСТ")) && (!wordBaseForms.get(0).endsWith("МЕЖД")))) {
-                return true;
-            }
+            return !wordBaseForms.get(0).endsWith("ПРЕДЛ") && (!wordBaseForms.get(0).endsWith("СОЮЗ")) &&
+                    (!wordBaseForms.get(0).endsWith("ЧАСТ")) && (!wordBaseForms.get(0).endsWith("МЕЖД"));
         }
         return false;
     }

@@ -2,37 +2,37 @@ package searchengine.services;
 
 import lombok.Getter;
 import lombok.Setter;
-import lombok.SneakyThrows;
 import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import searchengine.config.BatchSize;
 import searchengine.config.Site;
 import searchengine.config.SitesList;
 import searchengine.dto.indexing.DoneOperation;
 import searchengine.dto.indexing.ErrorOperation;
-import searchengine.dto.indexing.IndexingInfo;
+import searchengine.model.Lemma;
 import searchengine.model.PageEntity;
 import searchengine.model.SiteEntity;
 import searchengine.model.Status;
+import searchengine.repository.IndexRepository;
+import searchengine.repository.LemmaRepository;
 import searchengine.repository.PageEntityRepository;
 import searchengine.repository.SiteEntityRepository;
 
-import javax.xml.parsers.ParserConfigurationException;
 import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ForkJoinPool;
@@ -46,23 +46,36 @@ import java.util.logging.Logger;
 public class IndexingServiceImpl implements IndexingService {
     private final SiteEntityRepository siteEntityRepository;
     private final SitesList sites;
+    private final BatchSize batchSize;
     private final ForkJoinPool forkJoinPool = new ForkJoinPool(5);
     private final Logger logger = Logger.getLogger(IndexingServiceImpl.SiteCrawler.class.getName());
     private final PageEntityRepository pageEntityRepository;
+    private final LemmaRepository lemmaRepository;
+    private final IndexRepository indexRepository;
+    private final LemmaService lemmaService;
     private volatile boolean isIndexingStarted;
     private volatile boolean isIndexingStopped;
 
+
     public IndexingServiceImpl(SiteEntityRepository siteEntityRepository, SitesList sites,
-                               PageEntityRepository pageEntityRepository) {
+                               PageEntityRepository pageEntityRepository, LemmaRepository lemmaRepository,
+                               IndexRepository indexRepository, LemmaService lemmaService,
+                               BatchSize batchSize) {
         this.siteEntityRepository = siteEntityRepository;
         this.sites = sites;
         this.pageEntityRepository = pageEntityRepository;
+        this.lemmaRepository = lemmaRepository;
+        this.indexRepository = indexRepository;
+        this.lemmaService = lemmaService;
+        this.batchSize = batchSize;
     }
 
     @Override
     public Object startIndexing() {
         setIndexingStarted(true);
         setIndexingStopped(false);
+        indexRepository.deleteAll();
+        lemmaRepository.deleteAll();
         pageEntityRepository.deleteAll();
         siteEntityRepository.deleteAll();
         List<Site> sitesToIndex = sites.getSites();
@@ -79,26 +92,65 @@ public class IndexingServiceImpl implements IndexingService {
 
     @Override
     public Object indexPage(String url, Site siteConfig) {
-        Connection.Response response = connection(url);
-        SiteEntity site = siteEntityRepository.findSiteEntityByName(siteConfig.getName());
-        if (site != null) {
-            site.setStatus(Status.INDEXING);
-            try {
-                PageEntity page = pageEntityRepository.getPageEntityByPath(getRelativePathFromDocument(response.parse()));
-                if (page != null) {
-                    page.setPath(getRelativePathFromDocument(response.parse()));
-                    page.setCode(response.statusCode());
-                    page.setSiteId(site);
-                    page.setContent(response.parse().html());
-                    pageEntityRepository.save(page);
-                }
-                return new DoneOperation("true");
-            } catch (IOException e) {
-                throw new RuntimeException(e);
+        SiteEntity site = siteEntityRepository.getSiteEntityByUrl(siteConfig.getUrl());
+        try {
+            Connection.Response response = connection(url);
+
+
+            if (!siteConfig.getUrl().equals(site.getUrl())) {
+                return new ErrorOperation("Такого сайта в конфигурации нет");
             }
+
+            synchronized (site) {
+                site.setStatus(Status.INDEXING);
+                siteEntityRepository.save(site);
+            }
+
+            Document document = response.parse();
+            String pagePath = getRelativePathFromDocument(document);
+            PageEntity page = pageEntityRepository.getPageEntityByPath(pagePath);
+            if (page != null) {
+                deletePage(page, site);
+            }
+
+            PageEntity pageEntity = new PageEntity(
+                    site,
+                    pagePath,
+                    response.statusCode(),
+                    document.html());
+            pageEntityRepository.save(pageEntity);
+            lemmaService.saveLemma(pageEntity, site);
+
+            synchronized (site) {
+                site.setStatus(Status.INDEXED);
+                site.setStatusTime(LocalDateTime.now());
+                siteEntityRepository.save(site);
+            }
+
+            return new DoneOperation("true");
+        } catch (IOException e) {
+            site.setStatus(Status.FAILED);
+            site.setStatusTime(LocalDateTime.now());
+            site.setLastError(e.getMessage());
+            siteEntityRepository.save(site);
+            setIndexingStarted(false);
+            logger.log(Level.WARNING, "Ошибка при индексации страницы " + url, e);
+            throw new RuntimeException(e);
         }
-        return new ErrorOperation("Ошибка");
     }
+
+    private void deletePage(PageEntity page, SiteEntity site) {
+        Map<String, Integer> lemmasFromPage = lemmaService.lemmasAndCount(page.getContent());
+        lemmasFromPage.forEach((lemmaName, count) -> {
+            Lemma getLemmaFromDB = lemmaRepository.getLemmaByLemmaAndSiteId(lemmaName, site.getId());
+            if (getLemmaFromDB != null) {
+                getLemmaFromDB.setFrequency(getLemmaFromDB.getFrequency() - 1);
+                lemmaRepository.save(getLemmaFromDB);
+            }
+        });
+        pageEntityRepository.deletePageEntityById(page.getId());
+    }
+
 
     @Override
     public boolean getIsIndexingStarted() {
@@ -129,42 +181,47 @@ public class IndexingServiceImpl implements IndexingService {
             } else {
                 Site site = sites.get(0);
                 try {
-                    SiteEntity siteEntity = new SiteEntity();
-                    siteEntity.setUrl(site.getUrl());
-                    siteEntity.setStatusTime(LocalDateTime.now());
-                    siteEntity.setStatus(Status.INDEXING);
-                    siteEntity.setName(site.getName());
-                    siteEntityRepository.save(siteEntity);
+                    SiteEntity siteEntity = siteEntityRepository.save(new SiteEntity(
+                            Status.INDEXING,
+                            LocalDateTime.now(),
+                            site.getUrl(),
+                            site.getName()));
 
                     crawlSite(site, siteEntity);
                     if (isIndexingStopped) {
-                        siteEntity.setStatus(Status.FAILED);
-                        siteEntity.setStatusTime(LocalDateTime.now());
-                        siteEntity.setLastError("Индексация остановлена пользователем");
-                        siteEntityRepository.save(siteEntity);
+                        SiteEntity siteForUpdate = siteEntityRepository.getSiteEntityByUrl(site.getUrl());
+                        siteForUpdate.setStatus(Status.FAILED);
+                        siteForUpdate.setStatusTime(LocalDateTime.now());
+                        siteForUpdate.setLastError("Индексация остановлена пользователем");
+                        siteEntityRepository.save(siteForUpdate);
                     } else {
-                        siteEntity.setStatus(Status.INDEXED);
-                        siteEntity.setStatusTime(LocalDateTime.now());
-                        siteEntityRepository.save(siteEntity);
+                        SiteEntity siteForUpdate = siteEntityRepository.getSiteEntityByUrl(site.getUrl());
+                        siteForUpdate.setStatus(Status.INDEXED);
+                        siteForUpdate.setStatusTime(LocalDateTime.now());
+                        siteEntityRepository.save(siteForUpdate);
                     }
-
-                } catch (Exception e) {
-                    SiteEntity siteEntity = siteEntityRepository.findByUrl(site.getUrl());
+                } catch (IOException e) {
+                    SiteEntity siteEntity = siteEntityRepository.getSiteEntityByUrl(site.getUrl());
                     siteEntity.setStatus(Status.FAILED);
                     siteEntity.setStatusTime(LocalDateTime.now());
                     siteEntity.setLastError(e.getMessage());
                     siteEntityRepository.save(siteEntity);
+                    setIndexingStarted(false);
+                    throw new RuntimeException("ошибка в методе compute()" + e.getMessage());
+                } finally {
+                    if (TransactionSynchronizationManager.isActualTransactionActive() && !TransactionSynchronizationManager.isSynchronizationActive()) {
+                        TransactionSynchronizationManager.clear();
+                    }
                 }
             }
-
         }
 
-        @SneakyThrows
         @Transactional
-        void crawlSite(Site site, SiteEntity siteEntity) {
+        void crawlSite(Site site, SiteEntity siteEntity) throws MalformedURLException {
             Set<String> visitedUrls = new HashSet<>();
             Queue<String> urlsToCrawl = new LinkedList<>();
             urlsToCrawl.add(site.getUrl());
+            List<PageEntity> pageEntities = new ArrayList<>();
             while (!urlsToCrawl.isEmpty()) {
                 if (isIndexingStarted) {
                     String currentUrl = urlsToCrawl.poll();
@@ -173,7 +230,7 @@ public class IndexingServiceImpl implements IndexingService {
                     try {
                         doc = response.parse();
                     } catch (IOException e) {
-                        throw new RuntimeException(e);
+                        throw new RuntimeException(e.getMessage() + "Ошибка при парсинге");
                     }
                     String relativePath = getRelativePathFromDocument(doc);
                     List<Element> elements = getElementsFromDocument(doc);
@@ -186,13 +243,16 @@ public class IndexingServiceImpl implements IndexingService {
                             visitedUrls.add(link);
                         }
                     }
-                    if (pageEntityRepository.countPageEntitiesByPath(relativePath) == 0) {
-                        PageEntity page = new PageEntity();
-                        page.setSiteId(siteEntity);
-                        page.setPath(relativePath);
-                        page.setCode(response.statusCode());
-                        page.setContent(doc.html());
-                        pageEntityRepository.save(page);
+                    if (pageEntityRepository.getFirstByPath(relativePath) == null) {
+                        PageEntity page = new PageEntity(siteEntity, relativePath, response.statusCode(), doc.html());
+                        pageEntities.add(page);
+                        if (pageEntities.size() == batchSize.getBatchSize()) {
+                            pageEntityRepository.saveAll(pageEntities);
+                            for (PageEntity savedPage : pageEntities) {
+                                lemmaService.saveLemma(savedPage, siteEntity);
+                            }
+                            pageEntities.clear();
+                        }
                     }
                 } else {
                     break;

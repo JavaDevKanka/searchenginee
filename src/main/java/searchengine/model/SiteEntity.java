@@ -56,4 +56,21 @@ public class SiteEntity {
     @OneToMany(mappedBy = "siteId", cascade = CascadeType.ALL)
     private Set<PageEntity> pages;
 
+    public SiteEntity(Status status, LocalDateTime statusTime, String url, String name) {
+        this.status = status;
+        this.statusTime = statusTime;
+        this.url = url;
+        this.name = name;
+    }
+
+    public SiteEntity(Status status, LocalDateTime statusTime, String lastError) {
+        this.status = status;
+        this.statusTime = statusTime;
+        this.lastError = lastError;
+    }
+
+    public SiteEntity(Status status, LocalDateTime statusTime) {
+        this.status = status;
+        this.statusTime = statusTime;
+    }
 }

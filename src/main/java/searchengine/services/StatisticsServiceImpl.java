@@ -8,6 +8,10 @@ import searchengine.dto.statistics.DetailedStatisticsItem;
 import searchengine.dto.statistics.StatisticsData;
 import searchengine.dto.statistics.StatisticsResponse;
 import searchengine.dto.statistics.TotalStatistics;
+import searchengine.model.SiteEntity;
+import searchengine.repository.LemmaRepository;
+import searchengine.repository.PageEntityRepository;
+import searchengine.repository.SiteEntityRepository;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,6 +22,9 @@ import java.util.Random;
 public class StatisticsServiceImpl implements StatisticsService {
 
     private final Random random = new Random();
+    private final LemmaRepository lemmaRepository;
+    private final PageEntityRepository pageEntityRepository;
+    private final SiteEntityRepository siteEntityRepository;
     private final SitesList sites;
 
     @Override
@@ -34,18 +41,17 @@ public class StatisticsServiceImpl implements StatisticsService {
         total.setIndexing(true);
 
         List<DetailedStatisticsItem> detailed = new ArrayList<>();
-        List<Site> sitesList = sites.getSites();
-        for(int i = 0; i < sitesList.size(); i++) {
-            Site site = sitesList.get(i);
+        List<SiteEntity> sitesList = siteEntityRepository.getSiteEntities();
+        for (SiteEntity site : sitesList) {
             DetailedStatisticsItem item = new DetailedStatisticsItem();
             item.setName(site.getName());
             item.setUrl(site.getUrl());
-            int pages = random.nextInt(1_000);
-            int lemmas = pages * random.nextInt(1_000);
+            int pages = pageEntityRepository.countPagesbySiteId(site.getId());
+            int lemmas = lemmaRepository.countLemmasBySiteId(site.getId());
             item.setPages(pages);
             item.setLemmas(lemmas);
-            item.setStatus(statuses[i % 3]);
-            item.setError(errors[i % 3]);
+            item.setStatus(site.getStatus().name());
+            item.setError(site.getLastError());
             item.setStatusTime(System.currentTimeMillis() -
                     (random.nextInt(10_000)));
             total.setPages(total.getPages() + pages);
