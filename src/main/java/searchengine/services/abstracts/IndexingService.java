@@ -1,4 +1,4 @@
-package searchengine.services;
+package searchengine.services.abstracts;
 
 import lombok.Getter;
 import org.springframework.http.HttpStatus;

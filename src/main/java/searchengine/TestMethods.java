@@ -1,9 +1,9 @@
-package app.controllers;
+package searchengine;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.stereotype.Component;
 import org.springframework.test.context.junit4.SpringRunner;
 import searchengine.config.Site;
 import searchengine.model.SiteEntity;
@@ -14,25 +14,28 @@ import searchengine.repository.PageEntityRepository;
 import searchengine.repository.SiteEntityRepository;
 import searchengine.services.abstracts.IndexingService;
 import searchengine.services.abstracts.LemmaService;
+import searchengine.services.abstracts.SearchService;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 @SpringBootTest
-public class TestController {
+@RunWith(SpringRunner.class)
+public class TestMethods {
+    @Autowired
     private SiteEntityRepository siteEntityRepository;
-
+    @Autowired
     private PageEntityRepository pageEntityRepository;
-
+    @Autowired
     private LemmaRepository lemmaRepository;
-
+    @Autowired
     private IndexRepository indexRepository;
-
+    @Autowired
     private LemmaService lemmaService;
+    @Autowired
     private IndexingService indexingService;
-
-    public TestController() {
-    }
+    @Autowired
+    private SearchService searchService;
 
 
     @Test
@@ -70,6 +73,11 @@ public class TestController {
         List<Integer> longs = indexRepository.getIndexesByPageByIndex(2);
         lemmaRepository.deleteLemmasByIds(longs);
 
+    }
+
+    @Test
+    public void getSnippet() {
+//        searchService.getSnippet()
     }
 
 }

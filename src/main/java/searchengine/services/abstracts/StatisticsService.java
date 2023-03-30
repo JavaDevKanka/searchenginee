@@ -1,4 +1,4 @@
-package searchengine.services;
+package searchengine.services.abstracts;
 
 import searchengine.dto.statistics.StatisticsResponse;
 

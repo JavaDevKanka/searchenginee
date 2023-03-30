@@ -8,8 +8,6 @@ import org.jsoup.safety.Safelist;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
-import org.tartarus.snowball.ext.RussianStemmer;
 import searchengine.model.IndexPageLemma;
 import searchengine.model.Lemma;
 import searchengine.model.PageEntity;
@@ -18,14 +16,13 @@ import searchengine.repository.IndexRepository;
 import searchengine.repository.LemmaRepository;
 import searchengine.repository.PageEntityRepository;
 import searchengine.repository.SiteEntityRepository;
+import searchengine.services.abstracts.LemmaService;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -35,8 +32,6 @@ public class LemmaServiceImpl implements LemmaService {
 
     private static final String[] particlesNames = new String[]{"МЕЖД", "ПРЕДЛ", "СОЮЗ"};
     private final LuceneMorphology luceneMorphology;
-    private static final String REGEXP_TEXT = "\\s*(\\s|\\?|\\||»|«|\\*|,|!|\\.)\\s*";
-    private static final String REGEXP_WORD = "[а-яА-ЯёЁ]+";
     private final LemmaRepository lemmaRepository;
     private final IndexRepository indexRepository;
 
@@ -121,10 +116,6 @@ public class LemmaServiceImpl implements LemmaService {
         return lemmas;
     }
 
-    public String removeHtmlTags(String html) {
-        Document doc = Jsoup.parse(html);
-        return Jsoup.clean(doc.body().html(), Safelist.none());
-    }
 
     public boolean anyWordBaseBelongToParticle(List<String> wordBaseForms) {
         return wordBaseForms.stream().anyMatch(this::hasParticleProperty);
@@ -135,62 +126,6 @@ public class LemmaServiceImpl implements LemmaService {
             if (wordBase.toUpperCase().contains(property)) {
                 return true;
             }
-        }
-        return false;
-    }
-
-    public String getSnippet(String content, String textQuery) {
-
-        String textForSearchQuery = Jsoup.parse(content).getElementsContainingOwnText(textQuery).text();
-        Pattern pattern = Pattern.compile(textQuery);
-        Matcher matcher = pattern.matcher(textForSearchQuery);
-        String snippet;
-        if (matcher.find()) {
-            int beginIndex = matcher.start() > 80 ?
-                    textForSearchQuery.lastIndexOf(' ', matcher.start() - 60) : 0;
-            int endIndex = Math.min(beginIndex + matcher.end() + 160, textForSearchQuery.length());
-            snippet = textForSearchQuery.substring(beginIndex, endIndex);
-            snippet = StringUtils.replace(snippet, textQuery, "<b>" + textQuery + "</b>");
-
-        } else {
-            textQuery = textQuery.trim();
-            String[] words = textQuery.toLowerCase().split(REGEXP_TEXT);
-
-            StringBuilder builderSnippet = new StringBuilder();
-            RussianStemmer russianStemmer = new RussianStemmer();
-
-            for (String word : words) {
-                if (wordCheck(word)) {
-                    russianStemmer.setCurrent(word);
-                    if (russianStemmer.stem()) {
-                        word = russianStemmer.getCurrent() + ".*?\\b";
-                    }
-                    String textForSearchWord = Jsoup.parse(content).getElementsMatchingOwnText(word).text();
-                    pattern = Pattern.compile(word, Pattern.CASE_INSENSITIVE);
-                    matcher = pattern.matcher(textForSearchWord);
-                    if (matcher.find()) {
-                        int beginIndex = matcher.start() > 35 ?
-                                textForSearchWord.lastIndexOf(' ', matcher.start() - 15) : 0;
-                        int endIndex = Math.min(matcher.start() + 80, textForSearchWord.length());
-                        String result = matcher.group();
-                        String snippetWord = textForSearchWord.substring(beginIndex, endIndex);
-                        snippetWord = StringUtils.replace(snippetWord, result, "<b>" + result + "</b>");
-                        builderSnippet.append(snippetWord).append("...");
-                    }
-                }
-            }
-            snippet = builderSnippet.toString();
-        }
-        return snippet;
-    }
-
-    public boolean wordCheck(String word) {
-
-        if (word.matches(REGEXP_WORD)) {
-            List<String> wordBaseForms =
-                    luceneMorphology.getMorphInfo(word);
-            return !wordBaseForms.get(0).endsWith("ПРЕДЛ") && (!wordBaseForms.get(0).endsWith("СОЮЗ")) &&
-                    (!wordBaseForms.get(0).endsWith("ЧАСТ")) && (!wordBaseForms.get(0).endsWith("МЕЖД"));
         }
         return false;
     }

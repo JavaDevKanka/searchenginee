@@ -22,6 +22,8 @@ import searchengine.repository.IndexRepository;
 import searchengine.repository.LemmaRepository;
 import searchengine.repository.PageEntityRepository;
 import searchengine.repository.SiteEntityRepository;
+import searchengine.services.abstracts.IndexingService;
+import searchengine.services.abstracts.LemmaService;
 
 import java.io.File;
 import java.io.IOException;
@@ -132,6 +134,7 @@ public class IndexingServiceImpl implements IndexingService {
             site.setStatusTime(LocalDateTime.now());
             site.setStatus(Status.INDEXED);
             siteEntityRepository.save(site);
+            setIndexingStarted(false);
             return new DoneOperation("true");
         } catch (IOException e) {
             site.setStatus(Status.FAILED);

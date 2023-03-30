@@ -10,8 +10,8 @@ import searchengine.config.Site;
 import searchengine.config.SitesList;
 import searchengine.dto.indexing.ErrorOperation;
 import searchengine.dto.statistics.StatisticsResponse;
-import searchengine.services.IndexingService;
-import searchengine.services.StatisticsService;
+import searchengine.services.abstracts.IndexingService;
+import searchengine.services.abstracts.StatisticsService;
 
 @RestController
 @RequestMapping("/api")
@@ -59,5 +59,13 @@ public class ApiController {
             return ResponseEntity.badRequest().body(new ErrorOperation("Указанная страница не найдена"));
         }
         return ResponseEntity.badRequest().body(new ErrorOperation("Индексация уже запущена"));
+    }
+
+    @GetMapping
+    public ResponseEntity<Object> search(@RequestParam(value = "query") String query,
+                                         @RequestParam(value = "site") String site,
+                                         @RequestParam(value = "offset", required = false) int offset,
+                                         @RequestParam(value = "limit", required = false) int limit) {
+        return ResponseEntity.ok(indexingService.getIsIndexingStarted());
     }
 }

@@ -1,4 +1,4 @@
-package searchengine.services;
+package searchengine.services.abstracts;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,7 +15,5 @@ public interface LemmaService {
     Map<String, Integer> lemmasAndCount(String text);
     boolean anyWordBaseBelongToParticle(List<String> wordBaseForms);
     boolean hasParticleProperty(String wordBase);
-    String getSnippet(String content, String textQuery);
-    String removeHtmlTags(String html);
     void saveLemma(PageEntity page, SiteEntity site);
 }
